@@ -18,38 +18,38 @@ func TestStructMarsh(t *testing.T) {
         A: 2,
     }
 
-    b, _ := StructMarsh(reflect.ValueOf(c), []byte{}, []OffsetInfo{})
+    b, _ := StructMarsh(reflect.ValueOf(c), []byte{}, []PairOffset{})
     t.Log(b)
 
-    header := *(*HeaderInfo)(unsafe.Pointer(&b[0]))
+    header := *(*Header)(unsafe.Pointer(&b[0]))
     fmt.Println(header.Magic)
-    fmt.Println(header.ParisCount)
+    fmt.Println(header.PairCount)
 
     // 反射不出来数组结构，因为数组的长度需要是一个常量
     var offsets []uint64
     temp := (*SliceHeader)(unsafe.Pointer(&offsets))
 
-    temp.Data = uintptr(unsafe.Pointer(&b[unsafe.Sizeof(emptyHeaderInfo)]))
-    temp.Len = int(header.ParisCount)
-    temp.Cap = int(header.ParisCount)
+    temp.Data = uintptr(unsafe.Pointer(&b[unsafe.Sizeof(emptyHeader)]))
+    temp.Len = int(header.PairCount)
+    temp.Cap = int(header.PairCount)
     fmt.Println(offsets)
     for _, v := range offsets {
 
         // TODO 这里存在问题
-        offset := *(*OffsetInfo)(unsafe.Pointer(&v))
+        offset := *(*PairOffset)(unsafe.Pointer(&v))
         fmt.Println(offset.From)
         fmt.Println(offset.To)
     }
 
     // 结构体映射
-    fmt.Println(int(unsafe.Sizeof(emptyHeaderInfo)))
-    fmt.Println(int(unsafe.Sizeof(uint64(0))) * int(header.ParisCount))
-    // obj := (*Value)(unsafe.Pointer(&b[int(unsafe.Sizeof(emptyHeaderInfo))+int(unsafe.Sizeof(uint64(0)))*int(header.ParisCount)]))
+    fmt.Println(int(unsafe.Sizeof(emptyHeader)))
+    fmt.Println(int(unsafe.Sizeof(uint64(0))) * int(header.PairCount))
+    // obj := (*Value)(unsafe.Pointer(&b[int(unsafe.Sizeof(emptyHeader))+int(unsafe.Sizeof(uint64(0)))*int(header.PairCount)]))
 
     ca := &Case{}
     elem := reflect.ValueOf(ca).Elem()
     elemStruct := (*Value)(unsafe.Pointer(&elem))
-    elemStruct.ptr = unsafe.Pointer(&b[int(unsafe.Sizeof(emptyHeaderInfo))+int(unsafe.Sizeof(uint64(0)))*int(header.ParisCount)])
+    elemStruct.ptr = unsafe.Pointer(&b[int(unsafe.Sizeof(emptyHeader))+int(unsafe.Sizeof(uint64(0)))*int(header.PairCount)])
 
     reflect.ValueOf(ca).Elem().Set(elem)
     fmt.Println(ca)

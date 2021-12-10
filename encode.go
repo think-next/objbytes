@@ -22,30 +22,14 @@ func Marshal(v interface{}) ([]byte, error) {
     return nil, nil
 }
 
-type HeaderInfo struct {
-    Magic      uint32
-    ParisCount uint32
-}
+func StructMarsh(data interface{}, buffer []byte, pairs []PairOffset) ([]byte, error) {
 
-// 整个数据的组织结构调整为
-type ObjBytes struct {
-    Header      HeaderInfo
-    OffsetPairs []OffsetInfo
-    Data        uintptr
-}
+    t := reflect.TypeOf(data)
+    switch t.Kind() {
+    case reflect.Struct:
 
-type OffsetInfo struct {
-    From uint32
-    To   uint32
-}
+    }
 
-var emptyHeaderInfo = HeaderInfo{}
-
-const HeaderSize = unsafe.Sizeof(emptyHeaderInfo)
-
-func StructMarsh(data reflect.Value, buffer []byte, pairs []OffsetInfo) ([]byte, error) {
-
-    //  deep copy
     rv := *(*Value)(unsafe.Pointer(&data))
     bh := (*SliceHeader)(unsafe.Pointer(&buffer))
     bh.Data = uintptr(rv.ptr)
@@ -69,7 +53,7 @@ func StructMarsh(data reflect.Value, buffer []byte, pairs []OffsetInfo) ([]byte,
 
             fmt.Println("buffer ①", buffer)
             // 已经加到了数组中，下来就是要声明一个byte头
-            pairs = append(pairs, OffsetInfo{
+            pairs = append(pairs, PairOffset{
                 From: uint32(srcOffset),
                 To:   uint32(destRelativeOffset),
             })
@@ -81,9 +65,9 @@ func StructMarsh(data reflect.Value, buffer []byte, pairs []OffsetInfo) ([]byte,
        | paris|          uint64 * pairsCount
     */
     pairsCount := len(pairs)
-    header := HeaderInfo{
-        Magic:      1,
-        ParisCount: uint32(pairsCount),
+    header := Header{
+        Magic:     1,
+        PairCount: uint32(pairsCount),
     }
 
     // 将 header 转换为 []byte 数组，把数据存放到 byte 的数据段里面了
