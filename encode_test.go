@@ -15,10 +15,11 @@ type Case struct {
 func TestStructMarsh(t *testing.T) {
     c := Case{
         M: "付辉",
-        A: 2,
+        A: 1,
     }
 
-    b, _ := StructMarsh(reflect.ValueOf(c), []byte{}, []PairOffset{})
+    // TODO 不能执行两次 reflect.ValueOf
+    b, _ := Marshal(c)
     t.Log(b)
 
     header := *(*Header)(unsafe.Pointer(&b[0]))

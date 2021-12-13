@@ -23,4 +23,8 @@ type OverHead struct {
 
 var emptyHeader = Header{}
 
-const HeaderSize = unsafe.Sizeof(emptyHeader)
+const (
+    HeaderSize = uint64(unsafe.Sizeof(emptyHeader))
+    Magic      = 2112
+    Align      = 8
+)

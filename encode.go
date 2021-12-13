@@ -1,7 +1,6 @@
 package objbytes
 
 import (
-    "fmt"
     "reflect"
     "unsafe"
 )
@@ -11,7 +10,7 @@ func Marshal(v interface{}) ([]byte, error) {
     rv := reflect.ValueOf(v)
     switch rv.Type().Kind() {
     case reflect.Struct:
-
+        return marshal(v)
     case reflect.Ptr:
     case reflect.String:
     case reflect.Slice:
@@ -22,83 +21,104 @@ func Marshal(v interface{}) ([]byte, error) {
     return nil, nil
 }
 
-func StructMarsh(data interface{}, buffer []byte, pairs []PairOffset) ([]byte, error) {
+func marshal(data interface{}) ([]byte, error) {
 
+    objBytes := newObjBytes()
     t := reflect.TypeOf(data)
     switch t.Kind() {
     case reflect.Struct:
-
+        _ = objBytes.MarshalStruct(data)
     }
 
-    rv := *(*Value)(unsafe.Pointer(&data))
+    return objBytes.data, nil
+}
+
+type ObjBytes struct {
+    data        []byte
+    pairsOffset []PairOffset
+}
+
+func newObjBytes() *ObjBytes {
+    return new(ObjBytes)
+}
+
+func (o *ObjBytes) MarshalStruct(obj interface{}) error {
+    t := reflect.TypeOf(obj)
+    if t.Kind() != reflect.Struct {
+        panic("the kind of obj must be struct")
+    }
+
+    var buffer []byte
+    v := reflect.ValueOf(obj)
+    rv := *(*Value)(unsafe.Pointer(&v))
     bh := (*SliceHeader)(unsafe.Pointer(&buffer))
     bh.Data = uintptr(rv.ptr)
-    bh.Len = int(data.Type().Size())
+    bh.Len = int(t.Size())
     bh.Cap = bh.Len
 
-    //
-    for i := 0; i < data.NumField(); i++ {
+    o.data = buffer
+    o.iteratorStruct(v)
+    o.joinOverHead()
+    return nil
+}
 
-        switch data.Field(i).Type().Kind() {
+func (o *ObjBytes) iteratorStruct(obj reflect.Value) error {
+
+    for i := 0; i < obj.NumField(); i++ {
+        t := obj.Field(i).Type()
+        switch t.Kind() {
         case reflect.Struct:
 
         case reflect.Slice:
 
         case reflect.String:
-
-            // 获取这个字段的offset，通过offset来知道它byte数组中的位置
-            srcOffset := data.Type().Field(i).Offset
-            destRelativeOffset := len(buffer)
-            buffer = append(buffer, []byte(data.Field(i).String())...)
-
-            fmt.Println("buffer ①", buffer)
-            // 已经加到了数组中，下来就是要声明一个byte头
-            pairs = append(pairs, PairOffset{
-                From: uint32(srcOffset),
-                To:   uint32(destRelativeOffset),
-            })
+            o.appendString(uint32(obj.Type().Field(i).Offset), obj.Field(i).String())
         }
     }
-    /*
-       | magic｜         uint32
-       | pairsCount｜    uint32
-       | paris|          uint64 * pairsCount
-    */
-    pairsCount := len(pairs)
+
+    return nil
+}
+
+func (o *ObjBytes) appendString(offset uint32, v string) error {
+    toOffset := len(o.data)
+    o.data = append(o.data, []byte(v)...)
+    o.pairsOffset = append(o.pairsOffset, PairOffset{
+        From: offset,
+        To:   uint32(toOffset),
+    })
+
+    return nil
+}
+
+func (o *ObjBytes) joinOverHead() error {
+    pairsCount := len(o.pairsOffset)
     header := Header{
-        Magic:     1,
+        Magic:     Magic,
         PairCount: uint32(pairsCount),
     }
 
-    // 将 header 转换为 []byte 数组，把数据存放到 byte 的数据段里面了
-    b := *(*[HeaderSize]byte)(unsafe.Pointer(&header))
+    h := *(*[HeaderSize]byte)(unsafe.Pointer(&header))
+    message := h[:]
+    overHeadSize := HeaderSize
 
-    message := make([]byte, HeaderSize)
-    copy(message, b[:])
-
-    // 将 pairs 转换为 uint64 的数组
-    for i := 0; i < len(pairs); i++ {
-        v := *(*uint64)(unsafe.Pointer(&pairs[i]))
-
-        // 数组的声明必须是一个常量
+    // append pairs as byte array
+    for i := 0; i < pairsCount; i++ {
+        v := *(*uint64)(unsafe.Pointer(&o.pairsOffset[i]))
         b := *(*[unsafe.Sizeof(uint64(0))]byte)(unsafe.Pointer(&v))
         message = append(message, b[:]...)
+
+        overHeadSize += uint64(unsafe.Sizeof(uint64(0)))
     }
 
-    headerOffset := len(message)
-    fmt.Println("xxxxx", headerOffset)
+    o.data = append(message, o.data...)
 
-    // 把数据元素加进去，过程中需要调整指针的位置
-    message = append(message, buffer...)
-    for i := 0; i < len(pairs); i++ {
-        // TODO 应该把 from 和 to 的值也给改了才对
-        from := int(pairs[i].From) + headerOffset
-        to := int(pairs[i].To) + headerOffset
-
-        newAddr := uintptr(unsafe.Pointer(&message[to]))
-        buf := *(*[8]byte)(unsafe.Pointer(&newAddr))
-        copy(message[from:], buf[:])
+    // fix field offset
+    for i := 0; i < pairsCount; i++ {
+        from := overHeadSize + uint64(o.pairsOffset[i].From)
+        to := overHeadSize + uint64(o.pairsOffset[i].To)
+        a := *(*[Align]byte)(unsafe.Pointer(&to)) // TODO
+        copy(message[from:], a[:])
     }
 
-    return message, nil
+    return nil
 }
