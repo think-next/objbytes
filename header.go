@@ -27,4 +27,5 @@ const (
     HeaderSize = uint64(unsafe.Sizeof(emptyHeader))
     Magic      = 2112
     Align      = 8
+    PtrSize    = 4 << (^uintptr(0) >> 63)
 )
