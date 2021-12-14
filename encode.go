@@ -1,6 +1,7 @@
 package objbytes
 
 import (
+    "fmt"
     "reflect"
     "unsafe"
 )
@@ -70,7 +71,7 @@ func (o *ObjBytes) iteratorStruct(obj reflect.Value) error {
         case reflect.Struct:
 
         case reflect.Slice:
-
+            o.appendSlice(uint32(obj.Type().Field(i).Offset), obj.Field(i))
         case reflect.String:
             o.appendString(uint32(obj.Type().Field(i).Offset), obj.Field(i).String())
         }
@@ -82,6 +83,26 @@ func (o *ObjBytes) iteratorStruct(obj reflect.Value) error {
 func (o *ObjBytes) appendString(offset uint32, v string) error {
     toOffset := len(o.data)
     o.data = append(o.data, []byte(v)...)
+    o.pairsOffset = append(o.pairsOffset, PairOffset{
+        From: offset,
+        To:   uint32(toOffset),
+    })
+
+    return nil
+}
+
+func (o *ObjBytes) appendSlice(offset uint32, v reflect.Value) error {
+    var buffer []byte
+    rv := *(*Value)(unsafe.Pointer(&v))
+    bh := (*SliceHeader)(unsafe.Pointer(&buffer))
+    bh.Data = (*SliceHeader)(rv.ptr).Data
+    bh.Len = int(v.Type().Elem().Size()) * v.Len()
+    bh.Cap = bh.Len
+
+    toOffset := len(o.data)
+    o.data = append(o.data, buffer...)
+    // fmt.Println("output：", o.data)
+
     o.pairsOffset = append(o.pairsOffset, PairOffset{
         From: offset,
         To:   uint32(toOffset),
@@ -114,11 +135,16 @@ func (o *ObjBytes) joinOverHead() error {
 
     // fix field offset
     for i := 0; i < pairsCount; i++ {
+        fmt.Println("pair", i, o.pairsOffset[i], len(o.data))
         from := overHeadSize + uint64(o.pairsOffset[i].From)
         to := overHeadSize + uint64(o.pairsOffset[i].To)
-        a := *(*[Align]byte)(unsafe.Pointer(&to)) // TODO
+        a := *(*[PtrSize]byte)(unsafe.Pointer(&to))
         copy(message[from:], a[:])
     }
 
     return nil
+}
+
+func (o *ObjBytes) memAlign() {
+    if l :=
 }
